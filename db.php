@@ -1,20 +1,56 @@
 <?php
 
+/**
+ * All database results are returned as a special array of class 'DatabaseResult'.
+ * The array can be put in a foreach loop and each item is an object. If a class exists with the same name of the table,
+ * in camelcase, with the 'Model' suffix, that class will be used for each item in the array. For example:
+ *
+ * class UsersModel
+ * {
+ *	function print_name()
+ *	{
+ *		echo $this->first_name . ' ' . $this->last_name;
+ *	}
+ * }
+ * 
+ * $users = $db->query('SELECT * FROM `users`');
+ * $users[0]->print_name();
+ */
+
 class Database
 {
 	private $config;
 
+	/**
+	 * $config = array(
+	 *	'hostname' => 'localhost',
+	 *	'username' => 'user',
+	 *	'password' => 'pass',
+	 *	'database' => 'test',
+	 * );
+	 */
 	function __construct($config)
 	{
 		$this->config = $config;
 	}
 
+	/**
+	 * Returns string on error, FALSE otherwise.
+	 */
 	function error()
 	{
 		$err = mysql_error($this->_db());
 		return (empty($err) ? FALSE : $err);
 	}
 
+	/**
+	 * query(sql_string, [param1, param2, ...])
+	 *
+	 * $db->query('SELECT * FROM `table` WHERE user_id = ? AND date < ?', 1, '2012-06-19');
+	 *
+	 * Returns an array if the query has results, NULL otherwise.
+	 * (Use $db->error() to check for success of query if no results are returned.)
+	 */
 	function query($sql)
 	{
 		$params = array_slice(func_get_args(), 1);
@@ -29,12 +65,22 @@ class Database
 		$res = mysql_query($sql, $this->_db());
 
 		if (is_resource($res)) {
-			return new DatabaseResult($res);
+			$matches = array();
+			preg_match('/`(\w+)`/', $sql, $matches);
+
+			return new DatabaseResult($res, $matches[1]);
 		}
 
 		return NULL;
 	}
 
+	/**
+	 * query_first(sql_string, [param1, param2, ...])
+	 * 
+	 * $user = $db->query('SELECT * FROM `users` WHERE username = ? AND password = ?', $id, sha1($password));
+	 *
+	 * Returns the first result of a query if there is one, NULL otherwise.
+	 */
 	function query_first($sql)
 	{
 		$res = call_user_func_array(array($this, 'query'), func_get_args());
@@ -46,27 +92,49 @@ class Database
 		return NULL;
 	}
 
+	/**
+	 * insert($table_name, $array_of_field_name_values)
+	 *
+	 * insert('users', array('username' => 'alansmith', 'email' => 'me@sna.la'));
+	 *
+	 * Returns TRUE if the insert was successful, FALSE otherwise.
+	 */
 	function insert($table, $values)
 	{
 		$sql = "INSERT INTO `{$table}` SET";
 		$sql .= $this->_sql_set($values);
 		
-		return $this->query($sql);
+		$this->query($sql);
+
+		return ($this->error() === FALSE);
 	}
 
+	/**
+	 * update($table_name, $array_of_field_name_values, $array_of_field_name_values/$where_string)
+	 *
+	 * update('users', array('name' => 'Alan Smith'), array('username' => 'alansmith', 'AND email' => 'me@sna.la'));
+	 * OR
+	 * update('users', array('name' => 'Alan Smith'), "username = 'alansmith' AND email = 'me@sna.la'");
+	 *
+	 * Returns TRUE if the update was successful, FALSE otherwise.
+	 */
 	function update($table, $values, $where)
 	{
 		$sql = "UPDATE `{$table}` SET";
 		$sql .= $this->_sql_set($values);
 
-		$sql .= ' WHERE ';
+		$sql .= ' WHERE';
 		if (is_array($where)) {
-			$sql .= $this->_sql_set($where);
+			foreach ($values as $name => $val) {
+				$sql .= " {$name} = '" . mysql_real_escape_string($val) . "'";
+			}
 		} else {
-			$sql .= $where;
+			$sql .= ' ' . $where;
 		}
 
-		return $this->query($sql);
+		$this->query($sql);
+
+		return ($this->error() === FALSE);
 	}
 
 	private function _sql_set($values)
@@ -100,15 +168,24 @@ class Database
 class DatabaseResult implements ArrayAccess, Countable, Iterator
 {
 	private $result;
-	private $count;
 	private $array;
+	private $count;
+	private $class_name;
+
 	private $index;
 
-	function __construct($result)
+	function __construct($result, $table)
 	{
 		$this->result = $result;
 		$this->count = mysql_num_rows($result);
 		$this->array = array();
+
+		$name = str_ireplace(' ', '', ucwords(str_ireplace('_', ' ', $table))) . 'Model';
+		if (class_exists($name)) {
+			$this->class_name = $name;
+		} else {
+			$this->class_name = 'stdClass';
+		}
 	}
 
 	function count()
@@ -126,7 +203,7 @@ class DatabaseResult implements ArrayAccess, Countable, Iterator
 		$index = (int)$index;
 		if ($index + 1 > count($this->array)) {
 			for ($i = count($this->array); $i < $index + 1; $i++) {
-				$this->array[] = mysql_fetch_object($this->result);
+				$this->array[] = mysql_fetch_object($this->result, $this->class_name);
 			}
 		}
 
