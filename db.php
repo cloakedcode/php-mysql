@@ -1,20 +1,25 @@
 <?php
 
 /**
- * All database results are returned as a special array of class 'DatabaseResult'.
- * The array can be put in a foreach loop and each item is an object. If a class exists with the same name of the table,
- * in camelcase, with the 'Model' suffix, that class will be used for each item in the array. For example:
+ * An ORM database PHP interface for MySQL (in under 150 LOC).
  *
- * class UsersModel
- * {
- *	function print_name()
- *	{
- *		echo $this->first_name . ' ' . $this->last_name;
- *	}
- * }
- * 
- * $users = $db->query('SELECT * FROM `users`');
- * $users[0]->print_name();
+ * Establishing the connection to the database is done lazily, when a SQL query is executed.
+ * If a SQL query is never made, the connection is never established, conserving resources.
+ *
+ * All database results are returned as a special array of class `DatabaseResult`.
+ * The array can be put in a foreach loop and each item is an object. If a class exists with the same name of the table,
+ * in camelcase, with the `Model` suffix (e.g. `user_groups` becomes `UserGroupsModel`), that class will be used for each item in the array. For example:
+ *
+ *     class UsersModel
+ *     {
+ *	    function print_name()
+ *	    {
+ *		    echo $this->first_name . ' ' . $this->last_name;
+ *	    }
+ *     }
+ *     
+ *     $users = $db->query('SELECT * FROM `users`');
+ *     $users[0]->print_name();
  */
 
 class Database
@@ -22,12 +27,14 @@ class Database
 	private $config;
 
 	/**
-	 * $config = array(
-	 *	'hostname' => 'localhost',
-	 *	'username' => 'user',
-	 *	'password' => 'pass',
-	 *	'database' => 'test',
-	 * );
+	 * Creates a new database object with the given config info.
+	 *
+	 *     $config = array(
+	 *         'hostname' => 'localhost',
+	 *         'username' => 'user',
+	 *         'password' => 'pass',
+	 *         'database' => 'test',
+	 *     );
 	 */
 	function __construct($config)
 	{
@@ -35,7 +42,9 @@ class Database
 	}
 
 	/**
-	 * Returns string on error, FALSE otherwise.
+	 * Returns a string describing an error if the last SQL query resulted in an error.
+	 *
+	 * @return {String|Bool} String on error, FALSE otherwise.
 	 */
 	function error()
 	{
@@ -44,12 +53,17 @@ class Database
 	}
 
 	/**
-	 * query(sql_string, [param1, param2, ...])
+	 * Queries the database and returns the result.
+	 * Any number of extra parameters can be passed to be inserted into the SQL.
+	 * All SQL parameters are carefully escaped, preventing SQL injection.
+	 * 
+	 * Use $db->error() to check for success of query if no results are returned.
 	 *
-	 * $db->query('SELECT * FROM `table` WHERE user_id = ? AND date < ?', 1, '2012-06-19');
+	 *     $db->query('SELECT * FROM `table` WHERE user_id = ? AND date < ?', 1, '2012-06-19');
 	 *
-	 * Returns an array if the query has results, NULL otherwise.
-	 * (Use $db->error() to check for success of query if no results are returned.)
+	 * @param {String} sql The SQL string to execute.
+	 * @param {String} ... Extra parameters to be inserted into the SQL.
+	 * @return {Array|Null} If the query has results an array is returned, NULL otherwise.
 	 */
 	function query($sql)
 	{
@@ -75,11 +89,14 @@ class Database
 	}
 
 	/**
-	 * query_first(sql_string, [param1, param2, ...])
-	 * 
-	 * $user = $db->query('SELECT * FROM `users` WHERE username = ? AND password = ?', $id, sha1($password));
+	 * Executes the SQL statement and returns the first row. The syntax is the same as `query`.
 	 *
-	 * Returns the first result of a query if there is one, NULL otherwise.
+	 *     $user = $db->query('SELECT * FROM `users` WHERE username = ? AND password = ?', $id, sha1($password));
+	 *
+	 * @param {String} sql The SQL string to execute.
+	 * @param {String} ... Extra parameters to be inserted into the SQL.
+	 * @return {Object|Null} First result of a query as an object, if there is one, NULL otherwise.
+	 * @see query
 	 */
 	function query_first($sql)
 	{
@@ -93,11 +110,13 @@ class Database
 	}
 
 	/**
-	 * insert($table_name, $array_of_field_name_values)
+	 * Inserts a row into the table with the given data.
 	 *
-	 * insert('users', array('username' => 'alansmith', 'email' => 'me@sna.la'));
+	 *     $db->insert('users', array('username' => 'alansmith', 'email' => 'me@sna.la'));
 	 *
-	 * Returns TRUE if the insert was successful, FALSE otherwise.
+	 * @param {String} table Name of table to insert the row into.
+	 * @param {Array} values Array of key/value pairs of data to insert.
+	 * @return {Bool} TRUE if the insert was successful, FALSE otherwise.
 	 */
 	function insert($table, $values)
 	{
@@ -110,13 +129,16 @@ class Database
 	}
 
 	/**
-	 * update($table_name, $array_of_field_name_values, $array_of_field_name_values/$where_string)
+	 * Updates a row in the table specified by the `WHERE` conditions. The `where` parameter can be either a string or key/value array.
 	 *
-	 * update('users', array('name' => 'Alan Smith'), array('username' => 'alansmith', 'AND email' => 'me@sna.la'));
+	 *     $db->update('users', array('name' => 'Alan Smith'), array('username' => 'alansmith', 'AND email' => 'me@sna.la'));
 	 * OR
-	 * update('users', array('name' => 'Alan Smith'), "username = 'alansmith' AND email = 'me@sna.la'");
+	 *     $db->update('users', array('name' => 'Alan Smith'), "username = 'alansmith' AND email = 'me@sna.la'");
 	 *
-	 * Returns TRUE if the update was successful, FALSE otherwise.
+	 * @param {String} table Name of table to insert the row into.
+	 * @param {Array} values Array of key/value pairs of data to insert.
+	 * @param {Array|String} where Array of key/value pairs or string to use in the `WHERE` clause.
+	 * @return {Bool} TRUE if the update was successful, FALSE otherwise.
 	 */
 	function update($table, $values, $where)
 	{
@@ -125,7 +147,7 @@ class Database
 
 		$sql .= ' WHERE';
 		if (is_array($where)) {
-			foreach ($values as $name => $val) {
+			foreach ($where as $name => $val) {
 				$sql .= " {$name} = '" . mysql_real_escape_string($val) . "'";
 			}
 		} else {
@@ -135,6 +157,18 @@ class Database
 		$this->query($sql);
 
 		return ($this->error() === FALSE);
+	}
+
+	/**
+	 * Returns the auto-incremented ID of the last `INSERT` operation.
+	 *
+	 *     $id = $db->last_insert_id();
+	 *
+	 * @return {Integer} ID of the last `INSERT` operation.
+	 */
+	function last_insert_id()
+	{
+		return mysql_insert_id($this->_db());
 	}
 
 	private function _sql_set($values)
