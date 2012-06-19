@@ -1,5 +1,4 @@
 <?php
-
 ini_set('display_errors', TRUE);
 error_reporting(E_ALL);
 
@@ -11,13 +10,27 @@ try {
 	die("Failed to connect to database.");
 }
 
-/*
-$res = $db->query('INSERT INTO `test` SET body="This is the body. Break it and think of me."');
+$db->query('TRUNCATE TABLE `test`');
+
+$db->insert('test', array('body' => "This is my body, broken for you."));
+if ($db->error() !== FALSE)
+	echo "Failed to insert data into 'test' table.<br/>" . $db->error() . '<br/>';
+
+$db->insert('test', array('body' => "This is my blood, drink it in rememberance of me."));
+$res = $db->query('SELECT * FROM `test`');
+if ($res === NULL || count($res) < 2)
+	echo "Failed to select data from 'test' table." . '<br/>';
+
+$res = $db->query_first('SELECT * FROM `test`');
 if ($res === NULL)
-	die("Failed to insert data into 'test' table.");
-	*/
+	echo "Failed to select first entry from 'test' table." . '<br/>';
+
+$qoute = "Love your neighbor as thyself.";
+$res = $db->update('test', array('body' => $qoute), array('id' => 2));
+if ($db->error() !== FALSE || $db->query_first('SELECT body FROM `test` WHERE id = ?', 2)->body !== $qoute || $db->query_first('SELECT body FROM `test`')->body === $qoute)
+	echo "Failed to update entry in 'test' table." . '<br/>';
 
 $res = $db->query('SELECT * FROM `test`');
-if ($res === NULL || count($res) <= 0)
-	die("Failed to select data from `test` table.");
-var_dump($res[0]);
+foreach ($res as $row) {
+	echo "{$row->id}: {$row->body}<br/>";
+}

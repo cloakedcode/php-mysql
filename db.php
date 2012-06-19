@@ -11,7 +11,8 @@ class Database
 
 	function error()
 	{
-		return mysql_error($this->_db());
+		$err = mysql_error($this->_db());
+		return (empty($err) ? FALSE : $err);
 	}
 
 	function query($sql)
@@ -21,13 +22,13 @@ class Database
 		if (empty($params) === FALSE) {
 			foreach ($params as $p) {
 				$pos = stripos($sql, '?');
-				$sql = substr_replace($sql, mysql_real_escape_string($p), $pos, '?');
+				$sql = substr_replace($sql, "'" . mysql_real_escape_string($p) . "'", $pos);
 			}
 		}
 
 		$res = mysql_query($sql, $this->_db());
 
-		if ($res !== FALSE) {
+		if (is_resource($res)) {
 			return new DatabaseResult($res);
 		}
 
@@ -47,12 +48,35 @@ class Database
 
 	function insert($table, $values)
 	{
-		// @TODO - implement insert function 
+		$sql = "INSERT INTO `{$table}` SET";
+		$sql .= $this->_sql_set($values);
+		
+		return $this->query($sql);
 	}
 
 	function update($table, $values, $where)
 	{
-		// @TODO - implement update function 
+		$sql = "UPDATE `{$table}` SET";
+		$sql .= $this->_sql_set($values);
+
+		$sql .= ' WHERE ';
+		if (is_array($where)) {
+			$sql .= $this->_sql_set($where);
+		} else {
+			$sql .= $where;
+		}
+
+		return $this->query($sql);
+	}
+
+	private function _sql_set($values)
+	{
+		$sql = '';
+		foreach ($values as $name => $val) {
+			$sql .= " `{$name}` = '" . mysql_real_escape_string($val) . "',";
+		}
+
+		return substr($sql, 0, -1);
 	}
 
 	private function _db()
@@ -73,19 +97,23 @@ class Database
 	}
 }
 
-class DatabaseResult extends ArrayObject
+class DatabaseResult implements ArrayAccess, Countable, Iterator
 {
 	private $result;
+	private $count;
 	private $array;
+	private $index;
 
 	function __construct($result)
 	{
 		$this->result = $result;
+		$this->count = mysql_num_rows($result);
+		$this->array = array();
 	}
 
 	function count()
 	{
-		return mysql_num_rows($this->result);
+		return $this->count;
 	}
 
 	function offsetExists($index)
@@ -96,12 +124,40 @@ class DatabaseResult extends ArrayObject
 	function offsetGet($index)
 	{
 		$index = (int)$index;
-		if ($index > count($this->array)) {
-			for ($i = count($this->array); $i < $index; $i++) {
+		if ($index + 1 > count($this->array)) {
+			for ($i = count($this->array); $i < $index + 1; $i++) {
 				$this->array[] = mysql_fetch_object($this->result);
 			}
 		}
 
 		return $this->array[$index];
+	}
+	
+	function offsetSet($i, $v) {}
+	function offsetUnset($i) {}
+
+	function rewind()
+	{
+		$this->index = 0;
+	}
+
+	function valid()
+	{
+		return ($this->index < $this->count());
+	}
+
+	function next()
+	{
+		$this->index++;
+	}
+
+	function key()
+	{
+		return $this->index;
+	}
+
+	function current()
+	{
+		return $this->offsetGet($this->index);
 	}
 }
