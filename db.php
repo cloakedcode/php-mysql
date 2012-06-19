@@ -35,6 +35,7 @@ class Database
 	 *         'password' => 'pass',
 	 *         'database' => 'test',
 	 *     );
+	 *     $db = new Database($config);
 	 */
 	function __construct($config)
 	{
@@ -133,6 +134,7 @@ class Database
 	 *
 	 *     $db->update('users', array('name' => 'Alan Smith'), array('username' => 'alansmith', 'AND email' => 'me@sna.la'));
 	 * OR
+	 *
 	 *     $db->update('users', array('name' => 'Alan Smith'), "username = 'alansmith' AND email = 'me@sna.la'");
 	 *
 	 * @param {String} table Name of table to insert the row into.
